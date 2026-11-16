@@ -1,0 +1,57 @@
+
+name: Cutlass iOS Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build Cutlass for iPhone
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Check Xcode
+        run: |
+          xcodebuild -version
+          rustc --version
+          cargo --version
+
+      - name: Build Rust engine and Swift bindings
+        run: apps/ios/build-rust.sh
+
+      - name: Build iOS application
+        run: |
+          xcodebuild build \
+            -project apps/ios/ios.xcodeproj \
+            -scheme ios \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/CutlassBuild" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package iOS application
+        run: |
+          APP="$RUNNER_TEMP/CutlassBuild/Build/Products/Release-iphoneos/ios.app"
+          test -d "$APP"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$APP" dist/Cutlass-unsigned-iOS.zip
+
+      - name: Upload iOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cutlass-iOS-unsigned
+          path: dist/Cutlass-unsigned-iOS.zip
+          if-no-files-found: error
+          retention-days: 7
